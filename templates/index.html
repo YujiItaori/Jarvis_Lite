@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Jarvis Lite - Enhanced</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎙️ Jarvis Lite</h1>
+            <p class="subtitle">Your AI-Powered Personal Assistant</p>
+        </div>
+        
+        <div class="status-indicator status-ready" id="status">Ready to assist you</div>
+        
+        <form method="POST" id="commandForm">
+            <div class="input-section">
+                <input type="text" name="command" id="commandInput" placeholder="Type a command or ask anything..." required>
+                <button type="submit" class="btn btn-primary">
+                    <span style="position: relative; z-index: 1;">Submit</span>
+                </button>
+                <button type="button" class="btn btn-voice" id="voiceBtn" onclick="toggleVoice()">
+                    <span style="position: relative; z-index: 1;">🎤 Voice</span>
+                </button>
+            </div>
+        </form>
+
+        <div class="voice-visualizer" id="voiceVisualizer">
+            <div class="voice-bar"></div>
+            <div class="voice-bar"></div>
+            <div class="voice-bar"></div>
+            <div class="voice-bar"></div>
+            <div class="voice-bar"></div>
+            <div class="voice-bar"></div>
+            <div class="voice-bar"></div>
+        </div>
+
+        <div class="quick-commands">
+            <div class="quick-cmd" onclick="executeQuickCommand('What time is it?')">⏰ Current Time</div>
+            <div class="quick-cmd" onclick="executeQuickCommand('Open youtube')">📺 YouTube</div>
+            <div class="quick-cmd" onclick="executeQuickCommand('Open google')">🌐 Google Search</div>
+            <div class="quick-cmd" onclick="executeQuickCommand('Tell me a joke')">😄 Tell Joke</div>
+            <div class="quick-cmd" onclick="executeQuickCommand('Weather today')">🌤️ Weather</div>
+            <div class="quick-cmd" onclick="executeQuickCommand('Play music')">🎵 Music</div>
+        </div>
+
+        <div class="control-panel">
+            <button class="control-btn" onclick="toggleSettings()">⚙️ Settings</button>
+            <button class="control-btn" onclick="clearHistory()">🗑️ Clear History</button>
+            <button class="control-btn" onclick="toggleFullscreen()">🔲 Fullscreen</button>
+        </div>
+        
+        <div class="settings-panel" id="settingsPanel">
+            <div class="settings-group">
+                <label>
+                    <input type="checkbox" id="autoSpeak" checked> 
+                    Auto-speak responses
+                </label>
+            </div>
+            
+            <div class="settings-group">
+                <label>
+                    <span>Dark Mode</span>
+                    <div class="theme-switch">
+                        <input type="checkbox" id="darkModeToggle">
+                        <span class="slider"></span>
+                    </div>
+                </label>
+            </div>
+            
+            <div class="settings-group">
+                <label>
+                    Voice timeout: <span id="timeoutValue">5s</span>
+                    <input type="range" id="voiceTimeout" min="3" max="15" value="5">
+                </label>
+            </div>
+            
+            <div class="settings-group">
+                <label>
+                    <input type="checkbox" id="continuousListening"> 
+                    Continuous listening mode
+                </label>
+            </div>
+        </div>
+
+        <div class="output-box" id="outputBox" style="display: none;">
+            <div id="conversationHistory"></div>
+        </div>
+    </div>
+
+    <script>
+        let isListening = false;
+        let conversationHistory = [];
+        let currentTheme = 'light';
+
+        // Initialize theme from localStorage
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedTheme = localStorage.getItem('jarvis-theme') || 'light';
+            setTheme(savedTheme);
+            document.getElementById('darkModeToggle').checked = savedTheme === 'dark';
+        });
+
+        // Auto-refresh for real-time updates
+        setInterval(() => {
+            if (!isListening) {
+                fetch('/status')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.user_input && data.response) {
+                            addToConversation(data.user_input, data.response);
+                        }
+                    })
+                    .catch(error => console.log('Status check failed'));
+            }
+        }, 1000);
+
+        function setTheme(theme) {
+            currentTheme = theme;
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('jarvis-theme', theme);
+        }
+
+        function updateStatus(message, className = '') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = 'status-indicator ' + className;
+        }
+
+        function toggleVoice() {
+            if (isListening) {
+                stopListening();
+            } else {
+                startListening();
+            }
+        }
+
+        function startListening() {
+            isListening = true;
+            const voiceBtn = document.getElementById('voiceBtn');
+            const visualizer = document.getElementById('voiceVisualizer');
+            
+            voiceBtn.innerHTML = '<span style="position: relative; z-index: 1;">⏹️ Stop</span>';
+            voiceBtn.classList.add('listening');
+            visualizer.style.display = 'flex';
+            updateStatus('🎤 Listening for your command...', 'status-listening');
+
+            fetch('/voice', { method: 'POST' })
+                .then(() => {
+                    updateStatus('🤖 Processing your request...', 'status-processing');
+                })
+                .catch(error => {
+                    console.error('Voice command failed:', error);
+                    updateStatus('❌ Voice command failed', 'status-error');
+                })
+                .finally(() => {
+                    setTimeout(stopListening, 1000); // Give time for processing
+                });
+        }
+
+        function stopListening() {
+            isListening = false;
+            const voiceBtn = document.getElementById('voiceBtn');
+            const visualizer = document.getElementById('voiceVisualizer');
+            
+            voiceBtn.innerHTML = '<span style="position: relative; z-index: 1;">🎤 Voice</span>';
+            voiceBtn.classList.remove('listening');
+            visualizer.style.display = 'none';
+            updateStatus('✅ Ready to assist you', 'status-ready');
+        }
+
+        function executeQuickCommand(command) {
+            document.getElementById('commandInput').value = command;
+            updateStatus('🤖 Processing your request...', 'status-processing');
+            document.getElementById('commandForm').submit();
+        }
+
+        function addToConversation(userInput, response) {
+            const outputBox = document.getElementById('outputBox');
+            const history = document.getElementById('conversationHistory');
+            
+            // Check if this conversation already exists
+            const lastConversation = conversationHistory[conversationHistory.length - 1];
+            if (lastConversation && lastConversation.user === userInput && lastConversation.response === response) {
+                return; // Don't add duplicates
+            }
+
+            conversationHistory.push({ user: userInput, response: response, timestamp: new Date() });
+            
+            const conversationItem = document.createElement('div');
+            const timeStamp = new Date().toLocaleTimeString();
+            conversationItem.innerHTML = `
+                <div class="conversation-item user-message">
+                    <strong>🧑 You (${timeStamp}):</strong> ${userInput}
+                </div>
+                <div class="conversation-item jarvis-message">
+                    <strong>🤖 Jarvis:</strong> ${response}
+                </div>
+            `;
+            
+            history.appendChild(conversationItem);
+            outputBox.style.display = 'block';
+            
+            // Scroll to bottom smoothly
+            setTimeout(() => {
+                history.scrollTop = history.scrollHeight;
+            }, 100);
+            
+            // Keep only last 15 conversations
+            if (conversationHistory.length > 15) {
+                conversationHistory.shift();
+                history.removeChild(history.firstChild);
+            }
+        }
+
+        function toggleSettings() {
+            const panel = document.getElementById('settingsPanel');
+            const isVisible = panel.style.display === 'block';
+            panel.style.display = isVisible ? 'none' : 'block';
+            
+            if (!isVisible) {
+                panel.style.animation = 'slideIn 0.3s ease';
+            }
+        }
+
+        function clearHistory() {
+            conversationHistory = [];
+            const history = document.getElementById('conversationHistory');
+            const outputBox = document.getElementById('outputBox');
+            history.innerHTML = '';
+            outputBox.style.display = 'none';
+            updateStatus('🗑️ History cleared', 'status-ready');
+        }
+
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log('Fullscreen not supported');
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        }
+
+        // Settings event listeners
+        document.getElementById('voiceTimeout').addEventListener('input', function() {
+            document.getElementById('timeoutValue').textContent = this.value + 's';
+        });
+
+        document.getElementById('darkModeToggle').addEventListener('change', function() {
+            setTheme(this.checked ? 'dark' : 'light');
+        });
+
+        // Handle form submission
+        document.getElementById('commandForm').addEventListener('submit', function(e) {
+            updateStatus('🤖 Processing your request...', 'status-processing');
+        });
+
+        // Keyboard shortcuts
+        document.addEventListener('keydown', function(e) {
+            if (e.ctrlKey && e.key === ' ') {
+                e.preventDefault();
+                toggleVoice();
+            }
+            if (e.ctrlKey && e.key === 'd') {
+                e.preventDefault();
+                document.getElementById('darkModeToggle').click();
+            }
+            if (e.key === 'Escape' && document.getElementById('settingsPanel').style.display === 'block') {
+                toggleSettings();
+            }
+        });
+
+        // Add some smooth animations
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideIn {
+                from { opacity: 0; transform: translateY(-20px); }
+                to { opacity: 1; transform: translateY(0); }
+            }
+        `;
+        document.head.appendChild(style);
+
+        // Initialize
+        updateStatus('✅ Ready to assist you', 'status-ready');
+    </script>
+</body>
+</html>
